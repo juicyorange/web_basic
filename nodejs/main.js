@@ -122,7 +122,7 @@ var app = http.createServer(function(request,response){
         var description = post.description;
         var title = post.title;
         fs.writeFile(`./data/${title}`, description, 'utf8', function(err){
-          response.writeHead(302 , {Location: `/?id=${title}`});
+          response.writeHead(302 , {Location: `/?id=${title}`});//리다이렉션
           response.end();
         });
       });
