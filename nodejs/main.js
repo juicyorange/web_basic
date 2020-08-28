@@ -4,7 +4,7 @@ var url = require('url');
 var qs = require('querystring');
 // var 변수명 = require('모듈') 변수명이 해당 모듈을 사용할 것이라고 하는것.
 
-function templateHTML(_title, _list, _body){
+function templateHTML(_title, _list, _body, _control){
   var template = `
   <!doctype html>
   <html>
@@ -15,7 +15,7 @@ function templateHTML(_title, _list, _body){
   <body>
     <h1><a href="/">WEB</a></h1>
     ${_list}
-    <a href = "/create">create</a>
+    ${_control}
     ${_body}
   </body>
   </html>
@@ -61,7 +61,9 @@ var app = http.createServer(function(request,response){
           var title = 'Welcome';
           var description = 'Hello, NodeJS';
           var list = templateList(filelist);
-          var template = templateHTML(title, list, `<h2>${title}</h2><p>${description}</p>`) ;
+          var template = templateHTML(title, list,
+            `<h2>${title}</h2><p>${description}</p>`
+          , `<a href = "/create">create</a>`);
           //console.log(__dirname + _url); url 나오는 것 확인하는 코드
           response.writeHead(200); //200이 의미하는 것은 파일을 성공적으로 전송했다는 것을 의미
           response.end(template);
@@ -73,7 +75,9 @@ var app = http.createServer(function(request,response){
           fs.readdir('./data', function(error, filelist){
             var title = queryData.id;
             var list = templateList(filelist);
-            var template = templateHTML(title, list, `<h2>${title}</h2><p>${description}</p>`) ;
+            var template = templateHTML(title, list,
+              `<h2>${title}</h2><p>${description}</p>`,
+              `<a href = "/create">create</a> <a href = "/update?id=${title}">update</a>`);
             response.writeHead(200); //200이 의미하는 것은 파일을 성공적으로 전송했다는 것을 의미
             response.end(template);
           });
@@ -88,7 +92,7 @@ var app = http.createServer(function(request,response){
         var title = 'Create_HTML';
         var list = templateList(filelist);
         var template = templateHTML(title, list, `<h2>${title}</h2>
-          <form action="http://localhost:3000/proccess_create" method="post">
+          <form action="/proccess_create" method="post">
             <p><input type = "text" name = "title" placeholder="title"></p>
             <p>
               <textarea name="description" rows="8" cols="80" placeholder="description"></textarea>
@@ -97,7 +101,7 @@ var app = http.createServer(function(request,response){
               <input type = "submit">
             </p>
           </form>
-          `) ;
+          `, ``) ;
         //console.log(__dirname + _url); url 나오는 것 확인하는 코드
         response.writeHead(200); //200이 의미하는 것은 파일을 성공적으로 전송했다는 것을 의미
         response.end(template);
@@ -124,6 +128,50 @@ var app = http.createServer(function(request,response){
         fs.writeFile(`./data/${title}`, description, 'utf8', function(err){
           response.writeHead(302 , {Location: `/?id=${title}`});//리다이렉션
           response.end();
+        });
+      });
+    }
+    else if(pathname ===`/update`){
+      fs.readFile(`data/${queryData.id}`, 'utf8', function(err, description){
+        fs.readdir('./data', function(error, filelist){
+          var title = queryData.id;
+          var list = templateList(filelist);
+          var template = templateHTML(title, list,
+            `
+            <form action="/proccess_update" method="post">
+              <input type = "hidden" name = "id" value = "${title}">
+              <p><input type = "text" name = "title" placeholder="title" value = ${title}></p>
+              <p>
+                <textarea name="description" rows="8" cols="80" placeholder="description" >${description}</textarea>
+              </p>
+              <p>
+                <input type = "submit">
+              </p>
+            </form>
+            `,
+            `<a href = "/create">create</a> <a href = "/update?id=${title}">update</a>`);
+          response.writeHead(200); //200이 의미하는 것은 파일을 성공적으로 전송했다는 것을 의미
+          response.end(template);
+        });
+      });
+    }
+    else if(pathname ===`/proccess_update`){
+      var body = '';
+      request.on('data', function(data){
+        body = body + data;
+      });
+      request.on('end', function(){
+        var post = qs.parse(body);
+        var description = post.description;
+        var title = post.title;
+        var old_title = post.id;
+        fs.rename(`./data/${old_title}`,`./data/${title}`,function(err){ //파일 이름 바꾸기
+          fs.writeFile('./data/'+title, description,'utf8',function(err){ // 파일 내용 수정
+            if (err ===undefined || err == null){
+              response.writeHead(302, {Location: `/?id=${title}`});
+              response.end();
+            }
+          });
         });
       });
     }
