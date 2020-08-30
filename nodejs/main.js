@@ -2,45 +2,10 @@ var http = require('http');
 var fs = require('fs');
 var url = require('url');
 var qs = require('querystring');
+var template = require('./lib/template.js')
+var path = require('path');
+var sanitizeHtml = require('sanitize-html');
 // var 변수명 = require('모듈') 변수명이 해당 모듈을 사용할 것이라고 하는것.
-
-function templateHTML(_title, _list, _body, _control){
-  var template = `
-  <!doctype html>
-  <html>
-  <head>
-    <title>WEB1 - ${_title}</title>
-    <meta charset="utf-8">
-  </head>
-  <body>
-    <h1><a href="/">WEB</a></h1>
-    ${_list}
-    ${_control}
-    ${_body}
-  </body>
-  </html>
-  `;
-  return template;
-}
-
-function templateList(_filstlist){
-  /*
-  var list = `<ul>
-    <li><a href="/?id=HTML">HTML</a></li>
-    <li><a href="/?id=CSS">CSS</a></li>
-    <li><a href="/?id=JavaScript">JavaScript</a></li>
-  </ul>`
-  아래에 위 코드를 반복문 형식으로 변한 -> 훨씬 효율적임!!
-  */
-  var list = '<ul>';
-  var idx = 0;
-  while(idx<_filstlist.length){
-    list = list+`<li><a href="/?id=${_filstlist[idx]}">${_filstlist[idx]}</a></li>`;
-    idx++;
-  }
-  list = list+'</ul>';
-  return list;
-}
 
 var app = http.createServer(function(request,response){
     var _url = request.url;
@@ -60,26 +25,34 @@ var app = http.createServer(function(request,response){
 
           var title = 'Welcome';
           var description = 'Hello, NodeJS';
-          var list = templateList(filelist);
-          var template = templateHTML(title, list,
+          var list = template.list(filelist);
+          var html = template.html(title, list,
             `<h2>${title}</h2><p>${description}</p>`
           , `<a href = "/create">create</a>`);
           //console.log(__dirname + _url); url 나오는 것 확인하는 코드
           response.writeHead(200); //200이 의미하는 것은 파일을 성공적으로 전송했다는 것을 의미
-          response.end(template);
+          response.end(html);
           //response.end(fs.readFileSync(__dirname + _url));
         })
       }
       else{
-        fs.readFile(`data/${queryData.id}`, 'utf8', function(err, description){
+        var filteredid = path.parse(queryData.id).base;
+        fs.readFile(`data/${filteredid}`, 'utf8', function(err, description){
           fs.readdir('./data', function(error, filelist){
             var title = queryData.id;
-            var list = templateList(filelist);
-            var template = templateHTML(title, list,
-              `<h2>${title}</h2><p>${description}</p>`,
-              `<a href = "/create">create</a> <a href = "/update?id=${title}">update</a>`);
+            var list = template.list(filelist);
+            var sanitizedTitle = sanitizeHtml(title);
+            var sanitizedDescription = sanitizeHtml(description, {allowedTags :['h1']});
+            var html = template.html(sanitizedTitle, list,
+              `<h2>${sanitizedTitle}</h2><p>${sanitizedDescription}</p>`,
+              `<a href = "/create">create</a>
+              <a href = "/update?id=${sanitizedTitle}">update</a>
+              <form action = "/delete" method = "post">
+                <input type ="hidden" name="id" value="${sanitizedTitle}">
+                <input type = "submit" value ="delete">
+              </form>`);
             response.writeHead(200); //200이 의미하는 것은 파일을 성공적으로 전송했다는 것을 의미
-            response.end(template);
+            response.end(html);
           });
         });
       }
@@ -90,8 +63,8 @@ var app = http.createServer(function(request,response){
         //console.log(filelist); filstlist 출력해보기
 
         var title = 'Create_HTML';
-        var list = templateList(filelist);
-        var template = templateHTML(title, list, `<h2>${title}</h2>
+        var list = template.list(filelist);
+        var html = template.html(title, list, `<h2>${title}</h2>
           <form action="/proccess_create" method="post">
             <p><input type = "text" name = "title" placeholder="title"></p>
             <p>
@@ -104,7 +77,7 @@ var app = http.createServer(function(request,response){
           `, ``) ;
         //console.log(__dirname + _url); url 나오는 것 확인하는 코드
         response.writeHead(200); //200이 의미하는 것은 파일을 성공적으로 전송했다는 것을 의미
-        response.end(template);
+        response.end(html);
         //response.end(fs.readFileSync(__dirname + _url));
       });
     }
@@ -132,11 +105,12 @@ var app = http.createServer(function(request,response){
       });
     }
     else if(pathname ===`/update`){
-      fs.readFile(`data/${queryData.id}`, 'utf8', function(err, description){
+      var filteredid = path.parse(queryData.id).base;
+      fs.readFile(`data/${filteredid}`, 'utf8', function(err, description){
         fs.readdir('./data', function(error, filelist){
           var title = queryData.id;
-          var list = templateList(filelist);
-          var template = templateHTML(title, list,
+          var list = template.list(filelist);
+          var html = template.html(title, list,
             `
             <form action="/proccess_update" method="post">
               <input type = "hidden" name = "id" value = "${title}">
@@ -151,7 +125,7 @@ var app = http.createServer(function(request,response){
             `,
             `<a href = "/create">create</a> <a href = "/update?id=${title}">update</a>`);
           response.writeHead(200); //200이 의미하는 것은 파일을 성공적으로 전송했다는 것을 의미
-          response.end(template);
+          response.end(html);
         });
       });
     }
@@ -172,6 +146,23 @@ var app = http.createServer(function(request,response){
               response.end();
             }
           });
+        });
+      });
+    }
+    else if(pathname ===`/delete`){
+      var body = '';
+      request.on('data', function(data){
+        body = body + data;
+      });
+      request.on('end', function(){
+        var post = qs.parse(body);
+        var title = post.id;
+        var filteredid = path.parse(title).base;
+        fs.unlink(`./data/${filteredid}`,function(err){
+           response.writeHead(302, {Location: `/`});
+           //요청한 주소로 리다이렉션
+           response.end();
+
         });
       });
     }
