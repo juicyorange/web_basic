@@ -17,6 +17,7 @@ var template = {
     `;
     return template;
   },
+
   list:function(_filstlist){
     /*
     var list = `<ul>
